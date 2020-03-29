@@ -211,7 +211,7 @@ load _helpers
 }
 
 #--------------------------------------------------------------------
-# extraEnvironmentVars 
+# extraEnvironmentVars
 
 @test "server/dev-StatefulSet: set extraEnvironmentVars" {
   cd `chart_dir`
@@ -224,20 +224,57 @@ load _helpers
       yq -r '.spec.template.spec.containers[0].env' | tee /dev/stderr)
 
   local actual=$(echo $object |
-     yq -r '.[5].name' | tee /dev/stderr)
+     yq -r '.[7].name' | tee /dev/stderr)
   [ "${actual}" = "FOO" ]
 
   local actual=$(echo $object |
-      yq -r '.[5].value' | tee /dev/stderr)
+      yq -r '.[7].value' | tee /dev/stderr)
   [ "${actual}" = "bar" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].name' | tee /dev/stderr)
+      yq -r '.[8].name' | tee /dev/stderr)
   [ "${actual}" = "FOOBAR" ]
 
   local actual=$(echo $object |
-      yq -r '.[6].value' | tee /dev/stderr)
+      yq -r '.[8].value' | tee /dev/stderr)
   [ "${actual}" = "foobar" ]
+}
+
+#--------------------------------------------------------------------
+# extraSecretEnvironmentVars
+
+@test "server/dev-StatefulSet: set extraSecretEnvironmentVars" {
+  cd `chart_dir`
+  local object=$(helm template \
+      -x templates/server-statefulset.yaml  \
+      --set 'server.extraSecretEnvironmentVars[0].envName=ENV_FOO_0' \
+      --set 'server.extraSecretEnvironmentVars[0].secretName=secret_name_0' \
+      --set 'server.extraSecretEnvironmentVars[0].secretKey=secret_key_0' \
+      --set 'server.extraSecretEnvironmentVars[1].envName=ENV_FOO_1' \
+      --set 'server.extraSecretEnvironmentVars[1].secretName=secret_name_1' \
+      --set 'server.extraSecretEnvironmentVars[1].secretKey=secret_key_1' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.containers[0].env' | tee /dev/stderr)
+
+  local actual=$(echo $object |
+      yq -r '.[6].name' | tee /dev/stderr)
+  [ "${actual}" = "ENV_FOO_0" ]
+  local actual=$(echo $object |
+      yq -r '.[6].valueFrom.secretKeyRef.name' | tee /dev/stderr)
+  [ "${actual}" = "secret_name_0" ]
+  local actual=$(echo $object |
+      yq -r '.[6].valueFrom.secretKeyRef.key' | tee /dev/stderr)
+  [ "${actual}" = "secret_key_0" ]
+
+  local actual=$(echo $object |
+      yq -r '.[7].name' | tee /dev/stderr)
+  [ "${actual}" = "ENV_FOO_1" ]
+  local actual=$(echo $object |
+      yq -r '.[7].valueFrom.secretKeyRef.name' | tee /dev/stderr)
+  [ "${actual}" = "secret_name_1" ]
+  local actual=$(echo $object |
+      yq -r '.[7].valueFrom.secretKeyRef.key' | tee /dev/stderr)
+  [ "${actual}" = "secret_key_1" ]
 }
 
 #--------------------------------------------------------------------
@@ -273,4 +310,69 @@ load _helpers
       . | tee /dev/stderr |
       yq -r '.spec.volumeClaimTemplates' | tee /dev/stderr)
   [ "${actual}" = "null" ]
+}
+
+#--------------------------------------------------------------------
+# Security Contexts
+@test "server/dev-StatefulSet: uid default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsUser' | tee /dev/stderr)
+  [ "${actual}" = "100" ]
+}
+
+@test "server/dev-StatefulSet: uid configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.uid=2000' \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsUser' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
+}
+
+@test "server/dev-StatefulSet: gid default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsGroup' | tee /dev/stderr)
+  [ "${actual}" = "1000" ]
+}
+
+@test "server/dev-StatefulSet: gid configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.gid=2000' \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.runAsGroup' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
+}
+
+@test "server/dev-StatefulSet: fsgroup default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.fsGroup' | tee /dev/stderr)
+  [ "${actual}" = "1000" ]
+}
+
+@test "server/dev-StatefulSet: fsgroup configurable" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-statefulset.yaml \
+      --set 'server.gid=2000' \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.template.spec.securityContext.fsGroup' | tee /dev/stderr)
+  [ "${actual}" = "2000" ]
 }

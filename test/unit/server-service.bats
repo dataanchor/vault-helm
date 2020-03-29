@@ -121,7 +121,7 @@ load _helpers
   local actual=$(helm template \
       -x templates/server-service.yaml \
       --set 'server.dev.enabled=true' \
-      . | tee /dev/stderr | 
+      . | tee /dev/stderr |
       yq -r '.metadata.annotations["service.alpha.kubernetes.io/tolerate-unready-endpoints"]' | tee /dev/stderr)
   [ "${actual}" = "true" ]
 
@@ -137,6 +137,16 @@ load _helpers
       --set 'server.standalone.enabled=true' \
       . | tee /dev/stderr |
       yq -r '.metadata.annotations["service.alpha.kubernetes.io/tolerate-unready-endpoints"]' | tee /dev/stderr)
+  [ "${actual}" = "true" ]
+}
+
+@test "server/Service: generic annotations" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.service.annotations.vaultIsAwesome=true' \
+      . | tee /dev/stderr |
+      yq -r '.metadata.annotations["vaultIsAwesome"]' | tee /dev/stderr)
   [ "${actual}" = "true" ]
 }
 
@@ -162,4 +172,134 @@ load _helpers
       . | tee /dev/stderr |
       yq -r '.spec.publishNotReadyAddresses' | tee /dev/stderr)
   [ "${actual}" = "true" ]
+}
+
+@test "server/Service: type empty by default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+
+    local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.ha.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+}
+
+@test "server/Service: type can set" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.dev.enabled=true' \
+      --set 'server.service.type=NodePort' \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "NodePort" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.ha.enabled=true' \
+      --set 'server.service.type=NodePort' \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "NodePort" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.service.type=NodePort' \
+      . | tee /dev/stderr |
+      yq -r '.spec.type' | tee /dev/stderr)
+  [ "${actual}" = "NodePort" ]
+}
+
+@test "server/Service: clusterIP empty by default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.dev.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.ha.enabled=true' \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "null" ]
+}
+
+@test "server/Service: clusterIP can set" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.dev.enabled=true' \
+      --set 'server.service.clusterIP=None' \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "None" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.ha.enabled=true' \
+      --set 'server.service.clusterIP=None' \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "None" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.service.clusterIP=None' \
+      . | tee /dev/stderr |
+      yq -r '.spec.clusterIP' | tee /dev/stderr)
+  [ "${actual}" = "None" ]
+}
+
+@test "server/Service: port and targetPort will be 8200 by default" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.ports[0].port' | tee /dev/stderr)
+  [ "${actual}" = "8200" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      . | tee /dev/stderr |
+      yq -r '.spec.ports[0].targetPort' | tee /dev/stderr)
+  [ "${actual}" = "8200" ]
+}
+
+@test "server/Service: port and targetPort can be set" {
+  cd `chart_dir`
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.service.port=8000' \
+      . | tee /dev/stderr |
+      yq -r '.spec.ports[0].port' | tee /dev/stderr)
+  [ "${actual}" = "8000" ]
+
+  local actual=$(helm template \
+      -x templates/server-service.yaml \
+      --set 'server.service.targetPort=80' \
+      . | tee /dev/stderr |
+      yq -r '.spec.ports[0].targetPort' | tee /dev/stderr)
+  [ "${actual}" = "80" ]
 }

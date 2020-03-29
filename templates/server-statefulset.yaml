@@ -5,11 +5,12 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ template "vault.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "vault.name" . }}
-    chart: {{ template "vault.chart" . }}
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    helm.sh/chart: {{ include "vault.chart" . }}
+    app.kubernetes.io/name: {{ include "vault.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   serviceName: {{ template "vault.fullname" . }}
   podManagementPolicy: Parallel
@@ -18,17 +19,20 @@ spec:
     type: OnDelete
   selector:
     matchLabels:
-      app: {{ template "vault.name" . }}
-      chart: {{ template "vault.chart" . }}
-      release: {{ .Release.Name }}
+      helm.sh/chart: {{ template "vault.chart" . }}
+      app.kubernetes.io/name: {{ template "vault.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
       component: server
   template:
     metadata:
       labels:
-        app: {{ template "vault.name" . }}
-        chart: {{ template "vault.chart" . }}
-        release: {{ .Release.Name }}
+        helm.sh/chart: {{ template "vault.chart" . }}
+        app.kubernetes.io/name: {{ template "vault.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
         component: server
+        {{- if  .Values.server.extraLabels -}}
+          {{- toYaml .Values.server.extraLabels | nindent 8 -}}
+        {{- end -}}
       {{ template "vault.annotations" . }}
     spec:
       {{ template "vault.affinity" . }}
@@ -37,16 +41,20 @@ spec:
       terminationGracePeriodSeconds: 10
       serviceAccountName: {{ template "vault.fullname" . }}
       securityContext:
-        fsGroup: {{ template "vault.fsgroup" . }}
+        runAsNonRoot: true
+        runAsGroup: {{ .Values.server.gid | default 1000 }}
+        runAsUser: {{ .Values.server.uid | default 100 }}
+        fsGroup: {{ .Values.server.gid | default 1000 }}
       volumes:
         {{ template "vault.volumes" . }}
       containers:
         - name: vault
           {{ template "vault.resources" . }}
           securityContext:
-            fsGroup: {{ template "vault.fsgroup" . }}
-            privileged: true
+            capabilities:
+              add: ["IPC_LOCK"]
           image: "{{ .Values.global.image }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           command: {{ template "vault.command" . }}
           args: {{ template "vault.args" . }}
           env:
@@ -59,17 +67,18 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: VAULT_ADDR
-              value: "http://localhost:8200"
+              value: "{{ include "vault.scheme" . }}://127.0.0.1:8200"
+            - name: VAULT_API_ADDR
+              value: "{{ include "vault.scheme" . }}://$(POD_IP):8200"
             - name: SKIP_CHOWN
+              value: "true"
+            - name: SKIP_SETCAP
               value: "true"
             {{ template "vault.envs" . }}
             {{- include "vault.extraEnvironmentVars" .Values.server | nindent 12 }}
+            {{- include "vault.extraSecretEnvironmentVars" .Values.server | nindent 12 }}
           volumeMounts:
           {{ template "vault.mounts" . }}
-          lifecycle:
-            preStop:
-              exec:
-                command: ["vault", "step-down"]
           ports:
             - containerPort: 8200
               name: http
@@ -84,11 +93,23 @@ spec:
             #   1 - error
             #   2 - sealed
             exec:
-              command: ["/bin/sh", "-ec", "vault status"]
+              command: ["/bin/sh", "-ec", "vault status -tls-skip-verify"]
             failureThreshold: 2
             initialDelaySeconds: 5
             periodSeconds: 3
             successThreshold: 1
             timeoutSeconds: 5
+          lifecycle:
+            # Vault container doesn't receive SIGTERM from Kubernetes
+            # and after the grace period ends, Kube sends SIGKILL.  This 
+            # causes issues with graceful shutdowns such as deregistering itself
+            # from Consul (zombie services).
+            preStop:
+              exec:
+                command: ["/bin/sh","-c","kill -SIGTERM $(pidof vault)"]
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
   {{ template "vault.volumeclaims" . }}
 {{ end }}

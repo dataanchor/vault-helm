@@ -4,7 +4,7 @@ load _helpers
 
 @test "server/ha: testing deployment" {
   cd `chart_dir`
-  
+
   helm install --name="$(name_prefix)" \
     --set='server.ha.enabled=true' .
   wait_for_running $(name_prefix)-0
@@ -17,6 +17,11 @@ load _helpers
   local init_status=$(kubectl exec "$(name_prefix)-0" -- vault status -format=json |
     jq -r '.initialized')
   [ "${init_status}" == "false" ]
+
+  # Security
+  local ipc=$(kubectl get statefulset "$(name_prefix)" --output json |
+    jq -r '.spec.template.spec.containers[0].securityContext.capabilities.add[0]')
+  [ "${ipc}" == "IPC_LOCK" ]
 
   # Replicas
   local replicas=$(kubectl get statefulset "$(name_prefix)" --output json |
@@ -37,14 +42,10 @@ load _helpers
     jq -r '.spec.template.spec.volumes[0].configMap.name')
   [ "${volume}" == "$(name_prefix)-config" ]
 
-  local privileged=$(kubectl get statefulset "$(name_prefix)" --output json |
-    jq -r '.spec.template.spec.containers[0].securityContext.privileged')
-  [ "${privileged}" == "true" ]
-
   # Service
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.clusterIP')
-  [ "${service}" == "None" ]
+  [ "${service}" != "None" ]
 
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.type')
@@ -69,9 +70,9 @@ load _helpers
   [ "${token}" != "" ]
 
   # Vault Unseal
-  local pods=($(kubectl get pods --selector='app=vault' -o json | jq -r '.items[].metadata.name'))
+  local pods=($(kubectl get pods --selector='app.kubernetes.io/name=vault' -o json | jq -r '.items[].metadata.name'))
   for pod in "${pods[@]}"
-  do  
+  do
       kubectl exec -ti ${pod} -- vault operator unseal ${token}
   done
 
@@ -95,12 +96,12 @@ setup() {
     --name consul \
     --set 'ui.enabled=false' \
 
-  wait_for_running_consul 
+  wait_for_running_consul
 }
 
 #cleanup
 teardown() {
-  helm delete --purge vault 
+  helm delete --purge vault
   helm delete --purge consul
-  kubectl delete --all pvc 
+  kubectl delete --all pvc
 }

@@ -8,20 +8,25 @@ load _helpers
   wait_for_running $(name_prefix)-0
 
   # Sealed, not initialized
-  local sealed_status=$(kubectl exec "$(name_prefix)-0" -- vault status -format=json | 
+  local sealed_status=$(kubectl exec "$(name_prefix)-0" -- vault status -format=json |
     jq -r '.sealed' )
   [ "${sealed_status}" == "true" ]
-  
-  local init_status=$(kubectl exec "$(name_prefix)-0" -- vault status -format=json | 
+
+  local init_status=$(kubectl exec "$(name_prefix)-0" -- vault status -format=json |
     jq -r '.initialized')
   [ "${init_status}" == "false" ]
+
+  # Security
+  local ipc=$(kubectl get statefulset "$(name_prefix)" --output json |
+    jq -r '.spec.template.spec.containers[0].securityContext.capabilities.add[0]')
+  [ "${ipc}" == "IPC_LOCK" ]
 
   # Replicas
   local replicas=$(kubectl get statefulset "$(name_prefix)" --output json |
     jq -r '.spec.replicas')
   [ "${replicas}" == "1" ]
 
-  # Affinity 
+  # Affinity
   local affinity=$(kubectl get statefulset "$(name_prefix)" --output json |
     jq -r '.spec.template.spec.affinity')
   [ "${affinity}" != "null" ]
@@ -34,7 +39,7 @@ load _helpers
   local mountName=$(kubectl get statefulset "$(name_prefix)" --output json |
     jq -r '.spec.template.spec.containers[0].volumeMounts[0].name')
   [ "${mountName}" == "data" ]
-  
+
   local mountPath=$(kubectl get statefulset "$(name_prefix)" --output json |
     jq -r '.spec.template.spec.containers[0].volumeMounts[0].mountPath')
   [ "${mountPath}" == "/vault/data" ]
@@ -53,14 +58,10 @@ load _helpers
     jq -r '.spec.template.spec.securityContext.fsGroup')
   [ "${fsGroup}" == "1000" ]
 
-  local privileged=$(kubectl get statefulset "$(name_prefix)" --output json |
-    jq -r '.spec.template.spec.containers[0].securityContext.privileged')
-  [ "${privileged}" == "true" ]
-
   # Service
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.clusterIP')
-  [ "${service}" == "None" ]
+  [ "${service}" != "None" ]
 
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.type')
@@ -107,5 +108,5 @@ load _helpers
 teardown() {
   echo "helm/pvc teardown"
   helm delete --purge vault
-  kubectl delete --all pvc 
+  kubectl delete --all pvc
 }

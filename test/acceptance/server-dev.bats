@@ -20,7 +20,7 @@ load _helpers
   # Service
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.clusterIP')
-  [ "${service}" == "None" ]
+  [ "${service}" != "None" ]
 
   local service=$(kubectl get service "$(name_prefix)" --output json |
     jq -r '.spec.type')
@@ -52,5 +52,5 @@ load _helpers
 teardown() {
   echo "helm/pvc teardown"
   helm delete --purge vault
-  kubectl delete --all pvc 
+  kubectl delete --all pvc
 }
